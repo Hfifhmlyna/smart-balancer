@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Smart Load Balancer — Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0f1117;--surface:#1a1d27;--card:#21253a;--border:#2e3352;
+    --accent:#6c63ff;--accent2:#00d4aa;--accent3:#ff6b6b;
+    --text:#e2e8f0;--muted:#8892b0;--online:#00d4aa;--offline:#ff6b6b;--warn:#ffd93d
+  }
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh}
+
+  /* ── Header ── */
+  header{
+    background:linear-gradient(135deg,var(--surface),#1e213a);
+    border-bottom:1px solid var(--border);
+    padding:18px 32px;
+    display:flex;align-items:center;justify-content:space-between;
+    position:sticky;top:0;z-index:100;backdrop-filter:blur(8px)
+  }
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-icon{
+    width:38px;height:38px;background:var(--accent);border-radius:10px;
+    display:flex;align-items:center;justify-content:center;font-size:18px
+  }
+  .logo h1{font-size:18px;font-weight:700;letter-spacing:-.3px}
+  .logo p{font-size:11px;color:var(--muted);margin-top:1px}
+  .header-meta{display:flex;gap:20px;align-items:center}
+  .algo-badge{
+    background:rgba(108,99,255,.18);border:1px solid rgba(108,99,255,.4);
+    color:#a89fff;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600
+  }
+  .live-indicator{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .pulse{width:8px;height:8px;border-radius:50%;background:var(--online);animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
+
+  /* ── Layout ── */
+  main{padding:28px 32px;max-width:1400px;margin:0 auto}
+
+  /* ── Summary strip ── */
+  .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+  .stat-card{
+    background:var(--card);border:1px solid var(--border);border-radius:14px;
+    padding:20px 24px;position:relative;overflow:hidden
+  }
+  .stat-card::before{
+    content:'';position:absolute;top:0;left:0;right:0;height:3px;
+    background:var(--accent-color,var(--accent))
+  }
+  .stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
+  .stat-value{font-size:32px;font-weight:800;line-height:1;color:var(--accent-color,var(--text))}
+  .stat-sub{font-size:12px;color:var(--muted);margin-top:6px}
+
+  /* ── Section title ── */
+  .section-title{font-size:13px;font-weight:600;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px}
+
+  /* ── Server cards ── */
+  .servers{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}
+  .server-card{
+    background:var(--card);border:1px solid var(--border);border-radius:14px;
+    padding:20px;transition:border-color .2s,transform .15s;position:relative;overflow:hidden
+  }
+  .server-card.online{border-color:rgba(0,212,170,.3)}
+  .server-card.offline{border-color:rgba(255,107,107,.25);opacity:.75}
+  .server-card:hover{transform:translateY(-2px)}
+  .server-card::after{
+    content:'';position:absolute;top:0;left:0;right:0;height:3px;
+    background:var(--status-color,var(--muted))
+  }
+  .server-card.online::after{--status-color:var(--online)}
+  .server-card.offline::after{--status-color:var(--offline)}
+
+  .server-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
+  .server-name{font-size:15px;font-weight:700}
+  .server-host{font-size:11px;color:var(--muted);margin-top:2px;font-family:monospace}
+  .status-badge{
+    padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px
+  }
+  .status-badge.online{background:rgba(0,212,170,.15);color:var(--online)}
+  .status-badge.offline{background:rgba(255,107,107,.15);color:var(--offline)}
+
+  .weight-bar-wrap{margin-bottom:14px}
+  .weight-label{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px}
+  .weight-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+  .weight-fill{height:100%;border-radius:3px;background:var(--accent);transition:width .5s ease}
+
+  .server-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .mini-stat{background:rgba(255,255,255,.03);border:1px solid var(--border);
+    border-radius:8px;padding:10px 12px}
+  .mini-stat-label{font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px}
+  .mini-stat-value{font-size:18px;font-weight:700;color:var(--text)}
+
+  /* ── Charts row ── */
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+  .chart-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px}
+  .chart-card canvas{max-height:220px}
+
+  /* ── Log ── */
+  .log-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px}
+  .log-list{font-family:monospace;font-size:12px;max-height:180px;overflow-y:auto;color:var(--muted)}
+  .log-entry{padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+  .log-entry span.time{color:var(--accent);margin-right:8px}
+  .log-entry span.server{font-weight:700;margin-right:6px}
+  .log-entry.ev-online span.server{color:var(--online)}
+  .log-entry.ev-offline span.server{color:var(--offline)}
+  .log-entry.ev-proxy span.server{color:#a89fff}
+
+  /* ── Responsive ── */
+  @media(max-width:1000px){
+    .summary{grid-template-columns:repeat(2,1fr)}
+    .servers{grid-template-columns:1fr 1fr}
+    .charts{grid-template-columns:1fr}
+  }
+  @media(max-width:640px){
+    main{padding:16px}
+    header{padding:14px 16px}
+    .summary{grid-template-columns:repeat(2,1fr)}
+    .servers{grid-template-columns:1fr}
+    .charts{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚖️</div>
+    <div>
+      <h1>Smart Load Balancer</h1>
+      <p>Distributed Systems &mdash; Weighted Round Robin</p>
+    </div>
+  </div>
+  <div class="header-meta">
+    <span class="algo-badge">⚡ Weighted Round Robin</span>
+    <div class="live-indicator"><div class="pulse"></div>Live Monitoring</div>
+  </div>
+</header>
+
+<main>
+  <!-- Summary -->
+  <div class="summary">
+    <div class="stat-card" style="--accent-color:#6c63ff">
+      <div class="stat-label">Total Requests</div>
+      <div class="stat-value" id="totalReq">0</div>
+      <div class="stat-sub">Seluruh request masuk</div>
+    </div>
+    <div class="stat-card" style="--accent-color:#00d4aa">
+      <div class="stat-label">Backend Aktif</div>
+      <div class="stat-value" id="activeCount">0/3</div>
+      <div class="stat-sub">Server online saat ini</div>
+    </div>
+    <div class="stat-card" style="--accent-color:#ffd93d">
+      <div class="stat-label">Failover Events</div>
+      <div class="stat-value" id="failoverCount">0</div>
+      <div class="stat-sub">Pergantian server otomatis</div>
+    </div>
+    <div class="stat-card" style="--accent-color:#ff6b6b">
+      <div class="stat-label">Avg Response</div>
+      <div class="stat-value" id="avgResponse">—</div>
+      <div class="stat-sub">ms rata-rata semua server</div>
+    </div>
+  </div>
+
+  <!-- Server Cards -->
+  <div class="section-title">Status Backend Server</div>
+  <div class="servers" id="serverGrid"></div>
+
+  <!-- Charts -->
+  <div class="charts">
+    <div class="chart-card">
+      <div class="section-title">Distribusi Request (Pie)</div>
+      <canvas id="pieChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="section-title">Trend Request Real-Time</div>
+      <canvas id="lineChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="log-card">
+    <div class="section-title">Event Log</div>
+    <div class="log-list" id="logList"></div>
+  </div>
+</main>
+
+<script>
+const SERVERS_META = [
+  { id:'NODE-APP-1', color:'#6c63ff' },
+  { id:'NODE-APP-2', color:'#00d4aa' },
+  { id:'NODE-APP-3', color:'#ffd93d' },
+];
+
+let prevStatus = {};
+let lineHistory = [];
+const MAX_LINE_POINTS = 20;
+const logs = [];
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+const pieCtx  = document.getElementById('pieChart').getContext('2d');
+const lineCtx = document.getElementById('lineChart').getContext('2d');
+
+const pieChart = new Chart(pieCtx, {
+  type: 'doughnut',
+  data: {
+    labels: SERVERS_META.map(s => s.id),
+    datasets: [{
+      data: [0,0,0],
+      backgroundColor: SERVERS_META.map(s => s.color+'99'),
+      borderColor:     SERVERS_META.map(s => s.color),
+      borderWidth: 2,
+      hoverOffset: 8
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { labels: { color:'#8892b0', boxWidth:12 } }
+    },
+    cutout: '62%'
+  }
+});
+
+const lineChart = new Chart(lineCtx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: SERVERS_META.map(s => ({
+      label: s.id,
+      data: [],
+      borderColor: s.color,
+      backgroundColor: s.color+'22',
+      fill: true,
+      tension: 0.4,
+      pointRadius: 2,
+      borderWidth: 2
+    }))
+  },
+  options: {
+    responsive: true,
+    animation: false,
+    scales: {
+      x: { ticks:{ color:'#8892b0', maxTicksLimit:6 }, grid:{ color:'#2e3352' } },
+      y: { ticks:{ color:'#8892b0' }, grid:{ color:'#2e3352' }, beginAtZero:true }
+    },
+    plugins: { legend:{ labels:{ color:'#8892b0', boxWidth:12 } } }
+  }
+});
+
+// ── Log ───────────────────────────────────────────────────────────────────────
+function addLog(type, server, msg) {
+  const t = new Date().toLocaleTimeString('id-ID');
+  logs.unshift({ type, server, msg, t });
+  if (logs.length > 60) logs.pop();
+  renderLog();
+}
+
+function renderLog() {
+  const el = document.getElementById('logList');
+  el.innerHTML = logs.map(l =>
+    `<div class="log-entry ev-${l.type}">
+      <span class="time">${l.t}</span>
+      <span class="server">[${l.server}]</span>${l.msg}
+    </div>`
+  ).join('');
+}
+
+// ── Server Cards ──────────────────────────────────────────────────────────────
+function renderServers(servers) {
+  const grid = document.getElementById('serverGrid');
+  grid.innerHTML = servers.map(s => {
+    const meta    = SERVERS_META.find(m => m.id === s.id) || {};
+    const pct     = (s.weight / 3) * 100;
+    const avgMs   = s.avgResponseMs || 0;
+    const cls     = s.online ? 'online' : 'offline';
+    return `
+    <div class="server-card ${cls}" style="--status-color:${meta.color}">
+      <div class="server-header">
+        <div>
+          <div class="server-name">${s.id}</div>
+          <div class="server-host">${s.host}:${s.port}</div>
+        </div>
+        <div class="status-badge ${cls}">${s.online ? '✓ ONLINE' : '✗ OFFLINE'}</div>
+      </div>
+      <div class="weight-bar-wrap">
+        <div class="weight-label">
+          <span>Bobot (Weight)</span><span>${s.weight}/3</span>
+        </div>
+        <div class="weight-bar">
+          <div class="weight-fill" style="width:${pct}%;background:${meta.color}"></div>
+        </div>
+      </div>
+      <div class="server-stats">
+        <div class="mini-stat">
+          <div class="mini-stat-label">Requests</div>
+          <div class="mini-stat-value" style="color:${meta.color}">${s.requests.toLocaleString()}</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-label">Avg Response</div>
+          <div class="mini-stat-value">${s.online ? avgMs+'ms' : '—'}</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-label">Uptime</div>
+          <div class="mini-stat-value">${fmtUptime(s.serverUptime)}</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-label">Srv Req</div>
+          <div class="mini-stat-value">${(s.serverRequests||0).toLocaleString()}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function fmtUptime(s) {
+  if (!s) return '—';
+  if (s < 60) return s+'s';
+  if (s < 3600) return Math.floor(s/60)+'m';
+  return Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'m';
+}
+
+// ── Fetch & Update ────────────────────────────────────────────────────────────
+let prevRequests = {};
+
+async function fetchStatus() {
+  try {
+    const res  = await fetch('/gateway/status');
+    const data = await res.json();
+
+    // Summary
+    document.getElementById('totalReq').textContent    = data.totalProxied.toLocaleString();
+    document.getElementById('activeCount').textContent = `${data.activeBackends}/${data.totalBackends}`;
+    document.getElementById('failoverCount').textContent = data.failoverCount;
+
+    const allAvg = data.servers.filter(s => s.online && s.avgResponseMs > 0);
+    const avg = allAvg.length
+      ? Math.round(allAvg.reduce((a,s) => a+s.avgResponseMs, 0) / allAvg.length)
+      : 0;
+    document.getElementById('avgResponse').textContent = avg ? avg+'ms' : '—';
+
+    // Server cards
+    renderServers(data.servers);
+
+    // Detect status changes → log
+    data.servers.forEach(s => {
+      if (prevStatus[s.id] !== undefined && prevStatus[s.id] !== s.online) {
+        addLog(s.online ? 'online' : 'offline', s.id,
+          s.online ? 'kembali ONLINE ✓' : 'OFFLINE — failover aktif ✗');
+      }
+      prevStatus[s.id] = s.online;
+    });
+
+    // Pie chart
+    pieChart.data.datasets[0].data = data.servers.map(s => s.requests);
+    pieChart.update();
+
+    // Line chart
+    const label = new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    if (lineChart.data.labels.length >= MAX_LINE_POINTS) {
+      lineChart.data.labels.shift();
+      lineChart.data.datasets.forEach(d => d.data.shift());
+    }
+    lineChart.data.labels.push(label);
+    data.servers.forEach((s,i) => {
+      const diff = s.requests - (prevRequests[s.id] || 0);
+      lineChart.data.datasets[i].data.push(diff > 0 ? diff : 0);
+      prevRequests[s.id] = s.requests;
+    });
+    lineChart.update();
+
+  } catch(e) {
+    console.error('[Dashboard] Gagal fetch status:', e.message);
+  }
+}
+
+// ── Simulate ──────────────────────────────────────────────────────────────────
+let simActive = false;
+let simTimer  = null;
+
+async function simulateRequest() {
+  if (!simActive) return;
+  try {
+    const r = await fetch('/api/data');
+    const d = await r.json();
+    if (d.server) addLog('proxy', d.server, `request selesai (req #${d.requestNumber})`);
+  } catch {}
+  simTimer = setTimeout(simulateRequest, 400 + Math.random()*600);
+}
+
+// Auto-simulate on load
+setTimeout(() => { simActive = true; simulateRequest(); }, 1000);
+
+fetchStatus();
+setInterval(fetchStatus, 2000);
+</script>
+</body>
+</html>

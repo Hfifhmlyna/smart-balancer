@@ -1,0 +1,91 @@
+version: '3.8'
+
+networks:
+  smart-net:
+    driver: bridge
+
+services:
+
+  # ── Backend Server 1 (weight tinggi = lebih banyak traffic) ──────────────────
+  app1:
+    build:
+      context: ./node-app
+      dockerfile: Dockerfile
+    container_name: smart-app1
+    environment:
+      - SERVER_ID=NODE-APP-1
+      - SERVER_PORT=4000
+      - SERVER_WEIGHT=3
+    networks:
+      - smart-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # ── Backend Server 2 (weight sedang) ─────────────────────────────────────────
+  app2:
+    build:
+      context: ./node-app
+      dockerfile: Dockerfile
+    container_name: smart-app2
+    environment:
+      - SERVER_ID=NODE-APP-2
+      - SERVER_PORT=4000
+      - SERVER_WEIGHT=2
+    networks:
+      - smart-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # ── Backend Server 3 (weight rendah) ─────────────────────────────────────────
+  app3:
+    build:
+      context: ./node-app
+      dockerfile: Dockerfile
+    container_name: smart-app3
+    environment:
+      - SERVER_ID=NODE-APP-3
+      - SERVER_PORT=4000
+      - SERVER_WEIGHT=1
+    networks:
+      - smart-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # ── Gateway / Load Balancer ───────────────────────────────────────────────────
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: smart-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - GATEWAY_PORT=8080
+    networks:
+      - smart-net
+    depends_on:
+      - app1
+      - app2
+      - app3
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/gateway/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
